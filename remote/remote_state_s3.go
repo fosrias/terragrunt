@@ -31,15 +31,16 @@ type ExtendedRemoteStateConfigS3 struct {
 
 // A representation of the configuration options available for S3 remote state
 type RemoteStateConfigS3 struct {
-	Encrypt       bool   `mapstructure:"encrypt"`
-	Bucket        string `mapstructure:"bucket"`
-	Key           string `mapstructure:"key"`
-	Region        string `mapstructure:"region"`
-	Endpoint      string `mapstructure:"endpoint"`
-	Profile       string `mapstructure:"profile"`
-	RoleArn       string `mapstructure:"role_arn"`
-	LockTable     string `mapstructure:"lock_table"`
-	DynamoDBTable string `mapstructure:"dynamodb_table"`
+	Encrypt          bool   `mapstructure:"encrypt"`
+	Bucket           string `mapstructure:"bucket"`
+	Key              string `mapstructure:"key"`
+	Region           string `mapstructure:"region"`
+	Endpoint         string `mapstructure:"endpoint"`
+	Profile          string `mapstructure:"profile"`
+	RoleArn          string `mapstructure:"role_arn"`
+	LockTable        string `mapstructure:"lock_table"`
+	DynamoDBTable    string `mapstructure:"dynamodb_table"`
+	S3ForcePathStyle bool   `mapstructure:"force_path_style"`
 }
 
 // The DynamoDB lock table name used to be called lock_table, but has since been renamed to dynamodb_table, and the old
@@ -250,6 +251,12 @@ func validateS3Config(extendedConfig *ExtendedRemoteStateConfigS3, terragruntOpt
 // If the bucket specified in the given config doesn't already exist, prompt the user to create it, and if the user
 // confirms, create the bucket and enable versioning for it.
 func createS3BucketIfNecessary(s3Client *s3.S3, config *ExtendedRemoteStateConfigS3, terragruntOptions *options.TerragruntOptions) error {
+	if config.remoteStateConfigS3.S3ForcePathStyle {
+		terragruntOptions.Logger.Printf("Using Path Style Bucket. You must create the bucket manually.")
+
+		return nil
+	}
+
 	if !DoesS3BucketExist(s3Client, &config.remoteStateConfigS3) {
 		prompt := fmt.Sprintf("Remote state S3 bucket %s does not exist or you don't have permissions to access it. Would you like Terragrunt to create it?", config.remoteStateConfigS3.Bucket)
 		shouldCreateBucket, err := shell.PromptUserForYesNo(prompt, terragruntOptions)
@@ -267,6 +274,12 @@ func createS3BucketIfNecessary(s3Client *s3.S3, config *ExtendedRemoteStateConfi
 
 // Check if versioning is enabled for the S3 bucket specified in the given config and warn the user if it is not
 func checkIfVersioningEnabled(s3Client *s3.S3, config *RemoteStateConfigS3, terragruntOptions *options.TerragruntOptions) error {
+	if config.S3ForcePathStyle {
+		terragruntOptions.Logger.Printf("Using Path Style Bucket. Unable to confirm versioning.")
+
+		return nil
+	}
+
 	out, err := s3Client.GetBucketVersioning(&s3.GetBucketVersioningInput{Bucket: aws.String(config.Bucket)})
 	if err != nil {
 		return errors.WithStackTrace(err)
